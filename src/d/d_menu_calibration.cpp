@@ -12,22 +12,10 @@
 #include "d/d_meter_HIO.h"
 #include "d/d_msg_string.h"
 #include "m_Do/m_Do_controller_pad.h"
-#include <cstring>
 
-// Need 0xC bytes of padding with no symbol between dMenu_Calibration_c::__vtable and the end of .data
-// This is likely caused by the vtable of an abstract base class getting put there and then stripped out.
-// Not sure which abstract base class could go there though, so we simulate it with some dummy classes for now.
-class dummy_abstract_class {
-public:
-    virtual void virt_func_0() = 0;
-};
-class dummy_child_class : dummy_abstract_class {
-    virtual void virt_func_0();
-};
-static dummy_child_class dummy() {
-    dummy_child_class temp;
-    return temp;
-}
+#if PLATFORM_WII
+#include "m_Re/m_Re_controller_pad.h"
+#endif
 
 typedef void (dMenu_Calibration_c::*initFunc)();
 static initFunc map_init_process[] = {
@@ -43,6 +31,17 @@ static moveFunc map_move_process[] = {
     &dMenu_Calibration_c::step3_wait_move, &dMenu_Calibration_c::step3_move_move,
 };
 
+#if PLATFORM_WII
+dMenu_Calibration_c::dMenu_Calibration_c(JKRExpHeap *pHeap, JKRArchive *pArchive) {
+    mpHeap = pHeap;
+    mpArchive = pArchive;
+    field_0xfa = 0;
+    mCalibrationValue = mReCPd::m_cal_value;
+    mCalibrateDist = dComIfGs_getOptCalibrateDist();
+    field_0xf0 = mReCPd::m_cal_value;
+}
+#endif
+
 dMenu_Calibration_c::~dMenu_Calibration_c() {}
 
 void dMenu_Calibration_c::_move() {
@@ -56,7 +55,44 @@ void dMenu_Calibration_c::_move() {
     setHIO(false);
 }
 
+#if PLATFORM_WII
+void dMenu_Calibration_c::_create() {
+    mpMsgString = new dMsgString_c();
+    mpSelectCursor = new dSelect_cursor_c(2, 1.0f, NULL);
+    mpSelectCursor->setAlphaRate(0.0f);
+    mpSelectCursor->setScale(1.0f);
+    mpSelectCursor->setParam(1.01f,0.85f,0.02f,0.5f,0.5f);
+    mpSelectCursor->offPlayAnime(0);
+    this->field_0xfc = 0;
+    screenSetBase();
+    screenSetDoIcon();
+    setHIO(true);
+    (this->*map_init_process[mProcess])();
+}
+
+void dMenu_Calibration_c::_draw() {
+    J2DGrafContext* grafPort = dComIfGp_getCurrentGrafPort();
+    mpCalibrationMainScrn->draw(0.0f, 0.0f, grafPort);
+    if(mProcess == 1) {
+        mpSelectCursor->draw();
+    }
+    mpDoIconPartsScrn->draw(0.0f, 0.0f, grafPort);
+}
+
+void dMenu_Calibration_c::initStatus() {
+#if PLATFORM_WII
+    field_0x101 = 0;
+    mStatus = 1;
+    mProcess = 0;
+    for(int i = 0; i < 3; i++) {
+        field_0x58[i]->setAlphaRate(0.0f);
+    }
+#endif
+    step1_wait_init();
+}
+#else
 void dMenu_Calibration_c::_draw() {}
+#endif
 
 void dMenu_Calibration_c::step1_wait_init() {
     field_0xfa = 0;
@@ -97,6 +133,10 @@ void dMenu_Calibration_c::step1_wait_move() {
             field_0x58[1]->setAlphaRate(1.0f - alpha_rate);
         }
     }
+    #if PLATFORM_WII
+    Vec2 &dpdPos = mReCPd::getDpd2DPos(0);
+    field_0x64->translate(dpdPos.x - field_0xd4, dpdPos.y - field_0xd8);
+    #endif
 }
 
 void dMenu_Calibration_c::step1_move_init() {
@@ -105,12 +145,12 @@ void dMenu_Calibration_c::step1_move_init() {
 }
 
 void dMenu_Calibration_c::step1_move_move() {
-    if (mDoCPd_c::getTrigA(PAD_1)) {
+    if (cAPICPad_A_TRIGGER(PAD_1)) {
         mProcess = PROC_STEP2_WAIT;
         field_0xff = 0;
         Z2GetAudioMgr()->seStart(Z2SE_SY_MENU_NEXT, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
         dMeter2Info_set2DVibration();
-    } else if (mDoCPd_c::getTrigB(PAD_1)) {
+    } else if (cAPICPad_B_TRIGGER(PAD_1)) {
         field_0x101 = 0;
         mStatus = 0;
         Z2GetAudioMgr()->seStart(Z2SE_SY_MENU_BACK, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
@@ -224,13 +264,21 @@ void dMenu_Calibration_c::step3_move_init() {
 }
 
 void dMenu_Calibration_c::step3_move_move() {
+#if PLATFORM_WII
+    if (cAPICPad_A_TRIGGER(PAD_1)) {
+#else
     if (mDoCPd_c::getTrigA(PAD_1)) {
+#endif
         mStatus = 0;
         field_0x101 = 1;
         Z2GetAudioMgr()->seStart(Z2SE_SY_MENU_BACK, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
         dMeter2Info_set2DVibration();
         setCalibrationValue();
+#if PLATFORM_WII
+    } else if (cAPICPad_B_TRIGGER(PAD_1)) {
+#else
     } else if (mDoCPd_c::getTrigB(PAD_1)) {
+#endif
         mProcess = PROC_STEP2_WAIT;
         field_0xff = 1;
         Z2GetAudioMgr()->seStart(Z2SE_SY_MENU_BACK, NULL, 0, 0, 1.0f, 1.0f, -1.0f, -1.0f, 0);
@@ -241,9 +289,39 @@ void dMenu_Calibration_c::step3_move_move() {
 void dMenu_Calibration_c::setCalibrationValue() {
     dComIfGs_setOptCalValue(mCalibrationValue);
     dComIfGs_setOptCalibrateDist(mCalibrateDist);
+    mReCPd::m_cal_value = (s8)mCalibrationValue;
     field_0xec = mCalibrationValue;
-    field_0xf6 = mCalibrateDist;
+    field_0xf6 = (u16)mCalibrateDist;
 }
+
+#if PLATFORM_WII
+void dMenu_Calibration_c::resetCalibrationValue() {
+    dComIfGs_setOptCalValue(field_0xec);
+    dComIfGs_setOptCalibrateDist(field_0xf6);
+    mReCPd::m_cal_value = (s8)field_0xec;
+    mCalibrationValue = field_0xec;
+    mCalibrateDist = field_0xf6;
+}
+
+void dMenu_Calibration_c::firstCalibrationValue() {
+    dComIfGs_setOptCalValue(field_0xf0);
+    dComIfGs_setOptCalibrateDist(field_0xf8);
+    mReCPd::m_cal_value = (s8)field_0xf0;
+    mCalibrationValue = field_0xf0;
+    mCalibrateDist = field_0xf8;
+}
+
+void dMenu_Calibration_c::screenSetBase() {
+    dComIfGs_setOptCalibrateDist(field_0xf8);
+    return;
+}
+
+void dMenu_Calibration_c::screenSetDoIcon() {
+    dComIfGs_setOptCalibrateDist(field_0xf8);
+    return;
+}
+
+#endif
 
 void dMenu_Calibration_c::setAButtonString(u16 i_stringID) {
     if (i_stringID == 0) {

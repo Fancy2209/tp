@@ -1,15 +1,18 @@
 #ifndef D_MENU_D_MENU_CALIBRATION_H
 #define D_MENU_D_MENU_CALIBRATION_H
 
+#include "d/d_drawlist.h"
 #include "JSystem/J2DGraph/J2DTextBox.h"
 
 class CPaneMgr;
 class JKRExpHeap;
+class JKRArchive;
 class dMsgString_c;
 class dSelect_cursor_c;
 
-class dMenu_Calibration_c {
+class dMenu_Calibration_c : public dDlst_base_c {
 public:
+
     enum {
         /* 0 */ PROC_STEP1_WAIT,
         /* 1 */ PROC_STEP1_MOVE,
@@ -19,8 +22,12 @@ public:
         /* 5 */ PROC_STEP3_MOVE,
     };
 
+    void _create();
     void _move();
     void _draw();
+    void initStatus();
+    void firstCalibrationValue();
+    void resetCalibrationValue();
     void step1_wait_init();
     void step1_wait_move();
     void step1_move_init();
@@ -39,9 +46,12 @@ public:
     void setStepString(u16);
     void setExplainString(u16);
     void setHIO(bool);
+    void screenSetBase();
+    void screenSetDoIcon();
 
     virtual void draw();
     virtual ~dMenu_Calibration_c();
+    dMenu_Calibration_c(JKRExpHeap *pHeap, JKRArchive *pArchive);
 
     /* 0x004 */ JKRExpHeap* mpHeap;
     /* 0x008 */ JKRArchive* mpArchive;

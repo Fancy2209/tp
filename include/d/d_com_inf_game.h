@@ -1830,8 +1830,16 @@ inline void dComIfGs_setOptAttentionType(u8 i_attentionType) {
     g_dComIfG_gameInfo.info.getPlayer().getConfig().setAttentionType(i_attentionType);
 }
 
+inline u16 dComIfGs_getOptCalibrateDist() {
+    return g_dComIfG_gameInfo.info.getPlayer().getConfig().getCalibrateDist();
+}
+
 inline void dComIfGs_setOptCalibrateDist(u16 i_calibrateDist) {
     g_dComIfG_gameInfo.info.getPlayer().getConfig().setCalibrateDist(i_calibrateDist);
+}
+
+inline s8 dComIfGs_setOptCalValue() {
+    return g_dComIfG_gameInfo.info.getPlayer().getConfig().getCalValue();
 }
 
 inline void dComIfGs_setOptCalValue(s8 i_calValue) {
