@@ -9,6 +9,11 @@
 #include "JSystem/J3DGraphLoader/J3DModelLoader.h"
 #include "JSystem/J3DGraphLoader/J3DAnmLoader.h"
 
+#if PLATFORM_WII
+#include "d/d_cursor_mng.h"
+#endif
+
+
 class dFile_info_c;
 
 class dDlst_FileSel_c : public dDlst_base_c {
@@ -276,6 +281,11 @@ public:
     void dataSelectIn();
     void dataSelectInit();
     void dataSelect();
+    bool checkDPD(u64*);
+    u8 checkDPDFilePos(u64);
+    u8 checkDPDMenuPos(u64);
+    u8 checkDPDCopySelPos(u64);
+    u8 checkDPDYesNoPos(u64);
     void dataSelectStart();
     void selectDataMoveAnmInitSet(int, int);
     bool selectDataMoveAnm();

@@ -61,6 +61,14 @@ static s32 MenuSelEndFrameTbl[3] = {
 
 static u64 l_tagName13[3] = {MULTI_CHAR('w_dat_i0'), MULTI_CHAR('w_dat_i1'), MULTI_CHAR('w_dat_i2')};
 
+#if PLATFORM_WII
+static dCsr_mng_c::bloObj_c* l_bloObj = NULL; 
+static dCsr_mng_c::bloObj_c* l_bloYnObj = NULL; 
+static dCsr_mng_c::bloObj_c* l_blo3mObj = NULL; 
+static dCsr_mng_c::bloObj_c* l_bloCpSelObj = NULL; 
+static dCsr_mng_c::csr_c* l_bloCsr = NULL; 
+#endif
+
 dFs_HIO_c::dFs_HIO_c() {
     base_effect_appear_frames = 5;
     char_switch_frames = 5;
@@ -229,6 +237,29 @@ dFile_select_c::~dFile_select_c() {
     dComIfGp_getMain2DArchive()->removeResourceAll();
     #endif
 
+    #if PLATFORM_WII
+    dCsr_mng_c::releaseObj(l_bloObj);
+    delete l_bloObj;
+    l_bloObj = NULL;
+    
+    dCsr_mng_c::releaseObj(l_bloYnObj);
+    delete l_bloYnObj;
+    l_bloYnObj = NULL;
+
+    
+    dCsr_mng_c::releaseObj(l_blo3mObj);
+    delete l_blo3mObj;
+    l_blo3mObj = NULL;
+
+    dCsr_mng_c::releaseObj(l_bloCpSelObj);
+    delete l_bloCpSelObj;
+    l_bloCpSelObj = NULL;
+
+    dCsr_mng_c::releaseCsr(l_bloCsr);
+    delete l_bloCsr;
+    l_bloCsr = NULL;
+    #endif
+
     dComIfGp_getCollectResArchive()->removeResourceAll();
 
     mDoHIO_DELETE_CHILD(g_fsHIO.no);
@@ -383,7 +414,20 @@ void dFile_select_c::_move() {
         selCopyFileWakuAnm();
         copyBookIconAnm();
         mCpSel.Scr->animation();
+        #if PLATFORM_WII
+        l_bloCpSelObj->m_is_calc = 0;
+        l_bloCpSelObj->calc();
+        #endif
     }
+
+    #if PLATFORM_WII
+    l_bloObj->m_is_calc = 0;
+    l_bloObj->calc();
+    l_bloYnObj->m_is_calc = 0;
+    l_bloYnObj->calc();
+    l_blo3mObj->m_is_calc = 0;
+    l_blo3mObj->calc();
+    #endif
 
     mpFileWarning->_move();
     mpFileSelect3d->_move();
@@ -758,9 +802,27 @@ void dFile_select_c::dataSelectInit() {
 void dFile_select_c::dataSelect() {
     stick->checkTrigger();
 
+    u64 tag;
+    u8 dpdPos = -1;
+    if(checkDPD(&tag) == 1) {
+        dpdPos = checkDPDFilePos(tag);
+    } else {
+        field_0x4333 = -1;
+    }
     // If A or Start was pressed
-    if (mDoCPd_c::getTrigA(PAD_1) || mDoCPd_c::getTrigStart(PAD_1)) {
+    if (cAPICPad_A_TRIGGER(PAD_1) && mSelectNum != 0xFF) {
+        dMeter2Info_set2DVibrationM();
         dataSelectStart();  // run the quest log open process
+    } else if (dpdPos != 0xFF) {
+        mLastSelectNum = mSelectNum;
+        u8 prev = mSelectNum;
+        mSelectNum = dpdPos;
+        if (prev != dpdPos) {
+            mDoAud_seStart(Z2SE_FILE_SELECT_CURSOR, NULL, 1, 0);
+            dMeter2Info_set2DVibration();
+            dataSelectAnmSet();
+            mDataSelProc = DATASELPROC_DATA_SELECT_MOVE_ANIME;
+        }
     } else if (stick->checkUpTrigger()) {
         // if we're not on the top quest log
         if (mSelectNum != 0) {
@@ -781,6 +843,111 @@ void dFile_select_c::dataSelect() {
         }
     }
 }
+
+#if PLATFORM_WII
+bool dFile_select_c::checkDPD(u64* infoTag) {
+    dCsr_mng_c::csr_c* csr = l_bloCsr;
+    dCsr_mng_c::bloObj_c* obj = (dCsr_mng_c::bloObj_c*)l_bloCsr->m_pointed_obj;
+    bool ret = false;
+    if(obj) {
+        *infoTag = obj->m_pane_handle->mInfoTag;
+        ret = true;
+    }
+    return ret;
+}
+
+u8 dFile_select_c::checkDPDFilePos(u64 infoTag) {
+    static u64 tabiTag[] = {MULTI_CHAR('N_sel_00'), MULTI_CHAR('N_sel_01'), MULTI_CHAR('N_sel_02')};
+    
+    u8 ret = -1;
+    bool failedMatch = true;
+
+    for(int i = 0; i < ARRAY_SIZE(tabiTag); i++) {
+        if(infoTag == tabiTag[i]) {
+            ret = i;
+            if(i == field_0x4333) ret = -1;
+            else field_0x4333 = i;
+            failedMatch = false;
+            break;
+        }
+    }
+
+    if(failedMatch) {
+        field_0x4333 = -1;
+    }
+
+    return ret;
+}
+
+u8 dFile_select_c::checkDPDMenuPos(u64 infoTag) {
+    static u64 menuTag[] = {MULTI_CHAR('N_w_sta'), MULTI_CHAR('N_w_del'), MULTI_CHAR('N_w_cop')};
+    
+    u8 ret = -1;
+    bool failedMatch = true;
+
+    for(int i = 0; i < ARRAY_SIZE(menuTag); i++) {
+        if(infoTag == menuTag[i]) {
+            ret = i;
+            if(i == field_0x4333) ret = -1;
+            else field_0x4333 = i;
+            failedMatch = false;
+            break;
+        }
+    }
+
+    if(failedMatch) {
+        field_0x4333 = -1;
+    }
+
+    return ret;
+}
+
+u8 dFile_select_c::checkDPDCopySelPos(u64 infoTag) {
+    static u64 cpselTag[] = {MULTI_CHAR('N_sel_1'), MULTI_CHAR('N_sel_2')};
+    
+    u8 ret = -1;
+    bool failedMatch = true;
+
+    for(int i = 0; i < ARRAY_SIZE(cpselTag); i++) {
+        if(infoTag == cpselTag[i]) {
+            ret = i;
+            if(i == field_0x4333) ret = -1;
+            else field_0x4333 = i;
+            failedMatch = false;
+            break;
+        }
+    }
+
+    if(failedMatch) {
+        field_0x4333 = -1;
+    }
+
+    return ret;
+}
+
+u8 dFile_select_c::checkDPDYesNoPos(u64 infoTag) {
+    static u64 ynTag[] = {MULTI_CHAR('N_no'), MULTI_CHAR('N_w_yes')};
+    
+    u8 ret = -1;
+    bool failedMatch = true;
+
+    for(int i = 0; i < ARRAY_SIZE(ynTag); i++) {
+        if(infoTag == ynTag[i]) {
+            ret = i;
+            if(i == field_0x4333) ret = -1;
+            else field_0x4333 = i;
+            failedMatch = false;
+            break;
+        }
+    }
+
+    if(failedMatch) {
+        field_0x4333 = -1;
+    }
+
+    return ret;
+}
+#endif
 
 static s32 YnSelStartFrameTbl[2] = {
     1251,
@@ -856,7 +1023,7 @@ void dFile_select_c::dataSelectStart() {
 
         mLastSelectMenuNum = mSelectMenuNum;
 
-        #if PLATFORM_SHIELD
+        #if PLATFORM_SHIELD || PLATFORM_WII
         ketteiTxtDispAnmInit(0);
         #endif
 
@@ -1161,13 +1328,32 @@ void dFile_select_c::selectDataOpenEraseMove() {
 void dFile_select_c::menuSelect() {
     stick->checkTrigger();
 
+    u64 tag;
+    u8 dpdPos = -1;
+    if(checkDPD(&tag) == 1) {
+        dpdPos = checkDPDMenuPos(tag);
+    } else {
+        field_0x4333 = -1;
+    }
+
     // if a was pressed, do the menu selection process
-    if (mDoCPd_c::getTrigA(PAD_1)) {
+    if (cAPICPad_A_TRIGGER(PAD_1) && mSelectMenuNum != 0xFF) {
+        dMeter2Info_set2DVibrationM();
         menuSelectStart();
     } 
     // if b was pressed, do the menu cancel process
-    else if (mDoCPd_c::getTrigB(PAD_1)) {
+    else if (cAPICPad_B_TRIGGER(PAD_1)) {
         menuSelectCansel();
+    } else if (dpdPos != 0xFF) {
+        mLastSelectMenuNum = mSelectMenuNum;
+        u8 prev = mSelectMenuNum;
+        mSelectMenuNum = dpdPos;
+        if (prev != dpdPos) {
+            mDoAud_seStart(Z2SE_SY_MENU_CURSOR_COMMON, NULL, 1, 0);
+            dMeter2Info_set2DVibration();
+            menuSelectAnmSet();
+            mDataSelProc = DATASELPROC_MENU_SELECT_MOVE_ANM;
+        }
     } else if (stick->checkRightTrigger()) {
         if (!mIsDataNew[mSelectNum] && mSelectMenuNum != 0) {
             mDoAud_seStart(Z2SE_SY_MENU_CURSOR_COMMON, NULL, 0, 0);
@@ -2098,10 +2284,38 @@ void dFile_select_c::yesnoCursorShow() {
 void dFile_select_c::YesNoSelect() {
     stick->checkTrigger();
 
+    #if PLATFORM_WII
+    u64 tag;
+    u8 dpdPos = -1;
+    if(checkDPD(&tag) == 1) {
+        dpdPos = checkDPDYesNoPos(tag);
+    } else {
+        field_0x4333 = -1;
+    }
+    #endif
+
+    #if PLATFORM_WII
+    if (cAPICPad_A_TRIGGER(PAD_1) && field_0x0268 != 0xFF) {
+        dMeter2Info_set2DVibrationM();
+        yesNoSelectStart();
+    } else if (cAPICPad_B_TRIGGER(PAD_1)) {
+        yesnoCancelAnmSet();
+    } else if (dpdPos != 0xFF) {
+        field_0x0269 = field_0x0268;
+        u8 prev = field_0x0268;
+        field_0x0268 = dpdPos;
+        if (prev != dpdPos) {
+            mDoAud_seStart(Z2SE_SY_MENU_CURSOR_COMMON, NULL, 1, 0);
+            dMeter2Info_set2DVibration();
+            yesnoSelectAnmSet();
+            mDataSelProc = DATASELPROC_YES_NO_CURSOR_MOVE_ANM;
+        }
+    #else
     if (mDoCPd_c::getTrigA(PAD_1)) {
         yesNoSelectStart();
     } else if (mDoCPd_c::getTrigB(PAD_1)) {
         yesnoCancelAnmSet();
+    #endif
     } else if (stick->checkRightTrigger()) {
         if (field_0x0268 != 0) {
             mDoAud_seStart(Z2SE_SY_MENU_CURSOR_COMMON, NULL, 0, 0);
@@ -2932,6 +3146,15 @@ void dFile_select_c::screenSet() {
     fileSel.Scr->setPriority("zelda_file_select.blo", 0x1100000, mpArchive);
     dPaneClass_showNullPane(fileSel.Scr);
 
+    #if PLATFORM_WII
+    l_bloCsr = new dCsr_mng_c::csr_c();
+    l_bloCsr->set(NULL, 2, 0, 0);
+    dCsr_mng_c::entryCsr(l_bloCsr);
+    l_bloObj = new dCsr_mng_c::bloObj_c();
+    l_bloObj->create(fileSel.Scr, 2, 0, 0);
+    dCsr_mng_c::entryObj(l_bloObj);
+    #endif
+
     void* bck = JKRGetNameResource("zelda_file_select.bck", mpArchive);
     mBaseMoveAnm = (J2DAnmTransform*)J2DAnmLoaderDataBase::load(bck);
     field_0x0088 = (J2DAnmTransform*)J2DAnmLoaderDataBase::load(bck);
@@ -3194,6 +3417,11 @@ void dFile_select_c::screenSetCopySel() {
     JUT_ASSERT(5286, mCpSel.Scr != NULL);
     mCpSel.Scr->setPriority("zelda_file_select_copy_select.blo", 0x1100000, mpArchive);
     dPaneClass_showNullPane(mCpSel.Scr);
+    #if PLATFORM_WII
+    l_bloCpSelObj = new dCsr_mng_c::bloObj_c();
+    l_bloCpSelObj->create(mCpSel.Scr, 2, 6, 0);
+    dCsr_mng_c::entryObj(l_bloCpSelObj);
+    #endif
     mCpSel.mpPane2 = mCpSel.Scr->search(MULTI_CHAR('name_n'));
     mCpSel.mpPane1 = fileSel.Scr->search(MULTI_CHAR('name_n'));
 
@@ -3287,6 +3515,12 @@ void dFile_select_c::screenSetYesNo() {
     mYnSel.ScrYn->setPriority("zelda_file_select_yes_no_window.blo", 0x1100000, mpArchive);
     dPaneClass_showNullPane(mYnSel.ScrYn);
 
+    #if PLATFORM_WII
+    l_bloYnObj = new dCsr_mng_c::bloObj_c();
+    l_bloYnObj->create(mYnSel.ScrYn, 2, 20, 0);
+    dCsr_mng_c::entryObj(l_bloYnObj);
+    #endif
+
     void* bck = JKRGetNameResource("zelda_file_select_yes_no_window.bck", mpArchive);
     mYnSelBck = (J2DAnmTransform*)J2DAnmLoaderDataBase::load(bck);
     mYnSelBck2 = (J2DAnmTransform*)J2DAnmLoaderDataBase::load(bck);
@@ -3349,6 +3583,12 @@ void dFile_select_c::screenSet3Menu() {
     JUT_ASSERT(5530, m3mSel.Scr3m != NULL);
     m3mSel.Scr3m->setPriority("zelda_file_select_3menu_window.blo", 0x1100000, mpArchive);
     dPaneClass_showNullPane(m3mSel.Scr3m);
+
+    #if PLATFORM_WII
+    l_blo3mObj = new dCsr_mng_c::bloObj_c();
+    l_blo3mObj->create(m3mSel.Scr3m, 2, 10, 0);
+    dCsr_mng_c::entryObj(l_blo3mObj);
+    #endif
 
     void* bck = JKRGetNameResource("zelda_file_select_3menu_window.bck", mpArchive);
     m3mBck = (J2DAnmTransform*)J2DAnmLoaderDataBase::load(bck);
@@ -4944,14 +5184,31 @@ bool dFile_select_c::errYesNoSelect() {
     bool rv = false;
     stick->checkTrigger();
 
-    if (mDoCPd_c::getTrigA(PAD_1)) {
+    u64 tag;
+    u8 dpdPos = -1;
+    if(checkDPD(&tag) == 1) {
+        dpdPos = checkDPDYesNoPos(tag);
+    } else {
+        field_0x4333 = -1;
+    }
+
+    if (cAPICPad_A_TRIGGER(PAD_1) && field_0x0268 != 0xFF) {
+        dMeter2Info_set2DVibrationM();
         if (field_0x0268 != 0) {
             mDoAud_seStart(Z2SE_SY_CURSOR_OK, 0, 0, 0);
         } else {
             mDoAud_seStart(Z2SE_SY_CURSOR_CANCEL, 0, 0, 0);
         }
         mSelIcon->setAlphaRate(0.0f);
-        rv = true;
+        return true;
+    } else if (dpdPos != 0xFF) {
+        field_0x0269 = field_0x0268;
+        u8 prev = field_0x0268;
+        field_0x0268 = dpdPos;
+        if (prev != dpdPos) {
+            dMeter2Info_set2DVibration();
+            errCurMove(1);
+        }
     } else if (stick->checkRightTrigger()) {
         if (field_0x0268) {
             field_0x0269 = field_0x0268;

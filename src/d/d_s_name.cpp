@@ -89,7 +89,7 @@ s32 dScnName_c::create() {
         if (fpcM_GetName(this) == fpcNm_NAME_SCENE_e) {
             dFs_c->setUseType(0);
 
-            #if !PLATFORM_SHIELD
+            #if !(PLATFORM_SHIELD || PLATFORM_WII)
             dComIfGs_setNoFile(0);
             #endif
         }
@@ -134,6 +134,12 @@ s32 dScnName_c::create() {
         #endif
 
         dComIfGp_getVibration().Init();
+        #if PLATFORM_WII
+        dComIfGp_particle_createScene(NULL);
+        dComIfG_inf_c::baseCsr_c* baseCsr = dComIfG_inf_c::getBaseCsr();
+        baseCsr->offNavi();
+        //dConnectErrorMsg_c::start();
+        #endif
     }
     return phase_state;
 }
@@ -241,7 +247,7 @@ s32 dScnName_c::draw() {
         break;
     }
 
-    #if VERSION == VERSION_SHIELD_DEBUG
+    #if VERSION == VERSION_SHIELD_DEBUG || PLATFORM_WII
     dComIfGp_particle_calc3D();
     dComIfGp_particle_calc2D();
     #endif
@@ -399,7 +405,7 @@ static int dScnName_Delete(dScnName_c* i_this) {
 
     i_this->~dScnName_c();
 
-    #if VERSION == VERSION_SHIELD_DEBUG
+    #if VERSION == VERSION_SHIELD_DEBUG || PLATFORM_WII
     dComIfGp_particle_removeScene(true);
     #endif
 
